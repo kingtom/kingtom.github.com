@@ -42,7 +42,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Video Call Simulation</title>
+<title>Fluss Intercom</title>
 <style>
     body {
         margin: 0;
@@ -84,11 +84,11 @@
 </head>
 <body>
 <div id="ringing-screen">
-    <button id="start-call-button">Start Call</button>
+    <button id="start-call-button">Ring intercom</button>
 </div>
 <div id="video-call">
     <video id="background-video" src="video.mp4"></video>
-    <video id="user-video" autoplay></video>
+    <video id="user-video" autoplay playsinline></video>
     <button id="end-call-button">End Call</button>
 </div>
 <div id="call-ended" style="display: none;">
