@@ -1,137 +1,610 @@
-<script type="text/javascript">
-    var gk_isXlsx = false;
-    var gk_xlsxFileLookup = {};
-    var gk_fileData = {};
-    function filledCell(cell) {
-      return cell !== '' && cell != null;
-    }
-    function loadFileData(filename) {
-    if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-        try {
-            var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-            var firstSheetName = workbook.SheetNames[0];
-            var worksheet = workbook.Sheets[firstSheetName];
-
-            // Convert sheet to JSON to filter blank rows
-            var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-            // Filter out blank rows (rows where all cells are empty, null, or undefined)
-            var filteredData = jsonData.filter(row => row.some(filledCell));
-
-            // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-            var headerRowIndex = filteredData.findIndex((row, index) =>
-              row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-            );
-            // Fallback
-            if (headerRowIndex === -1 || headerRowIndex > 25) {
-              headerRowIndex = 0;
-            }
-
-            // Convert filtered JSON back to CSV
-            var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-            csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-            return csv;
-        } catch (e) {
-            console.error(e);
-            return "";
-        }
-    }
-    return gk_fileData[filename] || "";
-    }
-    </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fluss Intercom</title>
-<style>
-    body {
-        margin: 0;
-        padding: 0;
-    }
-    #ringing-screen, #call-ended {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        background-color: #333;
-        color: white;
-    }
-    #video-call {
-        position: relative;
-        height: 100vh;
-        display: none;
-    }
-    #background-video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-    #user-video {
-        position: absolute;
-        bottom: 10px;
-        right: 10px;
-        width: 100px;
-        height: 200px;
-    }
-    #start-call-button{
-        font-size: larger;
-    }
-    #end-call-button {
-        position: absolute;
-        bottom: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Afrikaans Vocabulary Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .flip-card {
+            perspective: 1000px;
+        }
+        .flip-card-inner {
+            transition: transform 0.3s;
+            transform-style: preserve-3d;
+        }
+        .flip-card.flipped .flip-card-inner {
+            transform: rotateY(180deg);
+        }
+        .flip-card-front, .flip-card-back {
+            backface-visibility: hidden;
+        }
+        .flip-card-back {
+            transform: rotateY(180deg);
+        }
+    </style>
 </head>
-<body>
-<div id="ringing-screen">
-    <button id="start-call-button">Call Intercom</button>
-</div>
-<div id="video-call">
-    <video id="background-video" src="fl.mp4" playsinline></video>
-    <video id="user-video" autoplay playsinline></video>
-    <button id="end-call-button">End Call</button>
-</div>
-<div id="call-ended" style="display: none;">
-    <h1>Call Ended</h1>
-</div>
-<script>
-    const startCallButton = document.getElementById('start-call-button');
-    const endCallButton = document.getElementById('end-call-button');
-    const ringingScreen = document.getElementById('ringing-screen');
-    const videoCall = document.getElementById('video-call');
-    const callEnded = document.getElementById('call-ended');
-    const backgroundVideo = document.getElementById('background-video');
-    const userVideo = document.getElementById('user-video');
-    let stream;
+<body class="bg-blue-50 min-h-screen">
+    <div id="app" class="container mx-auto p-4 max-w-md">
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-blue-800 mb-2">Afrikaans Vocabulary</h1>
+            <div class="bg-white rounded-lg p-3 shadow-sm">
+                <div class="flex justify-between text-sm text-gray-600">
+                    <span>Progress: <span id="progress">0/25</span></span>
+                    <span>Level: <span id="level">Beginner</span></span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                    <div id="progressBar" class="bg-blue-500 h-2 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
 
-    startCallButton.addEventListener('click', async () => {
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            userVideo.srcObject = stream;
-            ringingScreen.innerHTML = '<h1>Connecting...</h1>';
-            setTimeout(() => {
-                ringingScreen.style.display = 'none';
-                videoCall.style.display = 'block';
-                backgroundVideo.play();
-            }, 2000);
-        } catch (error) {
-            console.error('Error accessing camera:', error);
-            alert('Camera access is required for the video call.');
-        }
-    });
+        <!-- Navigation -->
+        <div class="flex mb-6 bg-white rounded-lg p-1 shadow-sm">
+            <button id="flashcardBtn" class="flex-1 px-4 py-2 rounded-md bg-blue-500 text-white font-medium">
+                Flashcards
+            </button>
+            <button id="quizBtn" class="flex-1 px-4 py-2 rounded-md text-gray-600 font-medium">
+                Quiz
+            </button>
+        </div>
 
-    endCallButton.addEventListener('click', () => {
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
+        <!-- Flashcard Mode -->
+        <div id="flashcardMode" class="space-y-4">
+            <div class="flip-card h-64" id="flashcard">
+                <div class="flip-card-inner relative w-full h-full">
+                    <div class="flip-card-front absolute w-full h-full">
+                        <div class="bg-white rounded-xl shadow-lg p-6 h-full flex flex-col justify-center items-center text-center border-2 border-blue-200">
+                            <div class="text-3xl font-bold text-blue-800 mb-4" id="afrikaans-word">
+                                Tap to start
+                            </div>
+                            <button id="pronounceBtn" class="bg-blue-100 text-blue-600 px-4 py-2 rounded-lg flex items-center gap-2 mb-4">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.824L4.168 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.168l4.215-3.824zm2.344 2.13a1 1 0 011.414 0A6.983 6.983 0 0116 10a6.983 6.983 0 01-2.859 4.794 1 1 0 11-1.414-1.414A4.983 4.983 0 0014 10a4.983 4.983 0 00-2.273-3.38 1 1 0 010-1.414zm-2.344 2.13a1 1 0 011.414 0A2.983 2.983 0 0112 10a2.983 2.983 0 01-1.203 2.664 1 1 0 11-1.414-1.414A.983.983 0 0010 10a.983.983 0 00-.797-.914 1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                </svg>
+                                Listen
+                            </button>
+                            <div class="text-sm text-gray-500">Tap card to see translation</div>
+                        </div>
+                    </div>
+                    <div class="flip-card-back absolute w-full h-full">
+                        <div class="bg-green-50 rounded-xl shadow-lg p-6 h-full flex flex-col justify-center text-center border-2 border-green-200">
+                            <div class="text-2xl font-bold text-green-800 mb-3" id="english-word">
+                                Translation
+                            </div>
+                            <div class="text-gray-700 mb-2 italic" id="sentence">
+                                Example sentence
+                            </div>
+                            <div class="text-sm text-gray-600" id="sentence-translation">
+                                Sentence translation
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button id="againBtn" class="flex-1 bg-red-500 text-white py-3 rounded-lg font-medium">
+                    Again
+                </button>
+                <button id="goodBtn" class="flex-1 bg-yellow-500 text-white py-3 rounded-lg font-medium">
+                    Good
+                </button>
+                <button id="easyBtn" class="flex-1 bg-green-500 text-white py-3 rounded-lg font-medium">
+                    Easy
+                </button>
+            </div>
+        </div>
+
+        <!-- Quiz Mode -->
+        <div id="quizMode" class="space-y-4 hidden">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="text-center mb-6">
+                    <div class="text-sm text-gray-500 mb-2">Question <span id="questionNum">1</span> of 5</div>
+                    <div class="text-xl font-bold text-gray-800" id="quizQuestion">
+                        What does "huis" mean?
+                    </div>
+                </div>
+                
+                <div class="space-y-3" id="quizOptions">
+                    <!-- Quiz options will be inserted here -->
+                </div>
+                
+                <div id="quizFeedback" class="mt-4 p-3 rounded-lg hidden">
+                    <!-- Feedback will be shown here -->
+                </div>
+            </div>
+            
+            <button id="nextQuizBtn" class="w-full bg-blue-500 text-white py-3 rounded-lg font-medium hidden">
+                Next Question
+            </button>
+            
+            <div id="quizResults" class="bg-white rounded-xl shadow-lg p-6 text-center hidden">
+                <div class="text-2xl font-bold text-green-600 mb-2">Quiz Complete!</div>
+                <div class="text-lg mb-4">Score: <span id="quizScore">0/5</span></div>
+                <button id="restartQuizBtn" class="bg-blue-500 text-white px-6 py-2 rounded-lg">
+                    Try Again
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Vocabulary data
+        const vocabulary = [
+            {
+                id: 1, afrikaans: "huis", english: "house",
+                sentence: "Ons woon in 'n groot huis.",
+                sentenceTranslation: "We live in a big house.",
+                difficulty: 1, category: "basic"
+            },
+            {
+                id: 2, afrikaans: "skool", english: "school",
+                sentence: "Ek gaan elke dag skool toe.",
+                sentenceTranslation: "I go to school every day.",
+                difficulty: 1, category: "basic"
+            },
+            {
+                id: 3, afrikaans: "vriende", english: "friends",
+                sentence: "My vriende help my met huiswerk.",
+                sentenceTranslation: "My friends help me with homework.",
+                difficulty: 1, category: "social"
+            },
+            {
+                id: 4, afrikaans: "familie", english: "family",
+                sentence: "Ons familie eet saam aandete.",
+                sentenceTranslation: "Our family eats dinner together.",
+                difficulty: 1, category: "social"
+            },
+            {
+                id: 5, afrikaans: "boek", english: "book",
+                sentence: "Ek lees 'n interessante boek.",
+                sentenceTranslation: "I am reading an interesting book.",
+                difficulty: 1, category: "education"
+            },
+            {
+                id: 6, afrikaans: "water", english: "water",
+                sentence: "Ons drink skoon water elke dag.",
+                sentenceTranslation: "We drink clean water every day.",
+                difficulty: 1, category: "basic"
+            },
+            {
+                id: 7, afrikaans: "kos", english: "food",
+                sentence: "Die kos by die skool is lekker.",
+                sentenceTranslation: "The food at school is delicious.",
+                difficulty: 1, category: "basic"
+            },
+            {
+                id: 8, afrikaans: "tyd", english: "time",
+                sentence: "Ons het nie genoeg tyd nie.",
+                sentenceTranslation: "We don't have enough time.",
+                difficulty: 2, category: "abstract"
+            },
+            {
+                id: 9, afrikaans: "werk", english: "work",
+                sentence: "My pa gaan elke dag werk toe.",
+                sentenceTranslation: "My father goes to work every day.",
+                difficulty: 1, category: "basic"
+            },
+            {
+                id: 10, afrikaans: "liefde", english: "love",
+                sentence: "Daar is baie liefde in ons huis.",
+                sentenceTranslation: "There is much love in our house.",
+                difficulty: 2, category: "emotions"
+            },
+            {
+                id: 11, afrikaans: "gelukkig", english: "happy",
+                sentence: "Ek is baie gelukkig vandag.",
+                sentenceTranslation: "I am very happy today.",
+                difficulty: 2, category: "emotions"
+            },
+            {
+                id: 12, afrikaans: "belangrik", english: "important",
+                sentence: "Onderwys is baie belangrik.",
+                sentenceTranslation: "Education is very important.",
+                difficulty: 2, category: "abstract"
+            },
+            {
+                id: 13, afrikaans: "moeilik", english: "difficult",
+                sentence: "Hierdie som is baie moeilik.",
+                sentenceTranslation: "This sum is very difficult.",
+                difficulty: 2, category: "descriptive"
+            },
+            {
+                id: 14, afrikaans: "maklik", english: "easy",
+                sentence: "Die toets was redelik maklik.",
+                sentenceTranslation: "The test was fairly easy.",
+                difficulty: 2, category: "descriptive"
+            },
+            {
+                id: 15, afrikaans: "weer", english: "weather",
+                sentence: "Die weer is vandag pragtig.",
+                sentenceTranslation: "The weather is beautiful today.",
+                difficulty: 1, category: "nature"
+            },
+            {
+                id: 16, afrikaans: "son", english: "sun",
+                sentence: "Die son skyn helder vandag.",
+                sentenceTranslation: "The sun is shining brightly today.",
+                difficulty: 1, category: "nature"
+            },
+            {
+                id: 17, afrikaans: "reën", english: "rain",
+                sentence: "Dit reën hard buite.",
+                sentenceTranslation: "It is raining hard outside.",
+                difficulty: 1, category: "nature"
+            },
+            {
+                id: 18, afrikaans: "droom", english: "dream",
+                sentence: "Ek het 'n wonderlike droom gehad.",
+                sentenceTranslation: "I had a wonderful dream.",
+                difficulty: 2, category: "abstract"
+            },
+            {
+                id: 19, afrikaans: "hoop", english: "hope",
+                sentence: "Ons het hoop vir die toekoms.",
+                sentenceTranslation: "We have hope for the future.",
+                difficulty: 2, category: "emotions"
+            },
+            {
+                id: 20, afrikaans: "vrees", english: "fear",
+                sentence: "Moenie vrees hê nie.",
+                sentenceTranslation: "Don't be afraid.",
+                difficulty: 2, category: "emotions"
+            },
+            {
+                id: 21, afrikaans: "moed", english: "courage",
+                sentence: "Sy het baie moed getoon.",
+                sentenceTranslation: "She showed great courage.",
+                difficulty: 2, category: "character"
+            },
+            {
+                id: 22, afrikaans: "wysheid", english: "wisdom",
+                sentence: "Ouma se wysheid help ons baie.",
+                sentenceTranslation: "Grandma's wisdom helps us a lot.",
+                difficulty: 3, category: "character"
+            },
+            {
+                id: 23, afrikaans: "kennis", english: "knowledge",
+                sentence: "Kennis is mag.",
+                sentenceTranslation: "Knowledge is power.",
+                difficulty: 2, category: "education"
+            },
+            {
+                id: 24, afrikaans: "verstaan", english: "understand",
+                sentence: "Ek verstaan die les nou.",
+                sentenceTranslation: "I understand the lesson now.",
+                difficulty: 2, category: "education"
+            },
+            {
+                id: 25, afrikaans: "leer", english: "learn",
+                sentence: "Ons leer elke dag iets nuuts.",
+                sentenceTranslation: "We learn something new every day.",
+                difficulty: 1, category: "education"
+            }
+        ];
+
+        // App state
+        let currentWordIndex = 0;
+        let isFlipped = false;
+        let progress = JSON.parse(localStorage.getItem('progress') || '{}');
+        let currentMode = 'flashcard';
+        let quizData = [];
+        let currentQuizIndex = 0;
+        let quizScore = 0;
+
+        // Initialize progress for all words
+        vocabulary.forEach(word => {
+            if (!progress[word.id]) {
+                progress[word.id] = { 
+                    repetitions: 0, 
+                    interval: 1, 
+                    easeFactor: 2.5, 
+                    nextReview: Date.now(),
+                    correct: 0,
+                    total: 0
+                };
+            }
+        });
+
+        // DOM elements
+        const flashcard = document.getElementById('flashcard');
+        const afrikaansWord = document.getElementById('afrikaans-word');
+        const englishWord = document.getElementById('english-word');
+        const sentence = document.getElementById('sentence');
+        const sentenceTranslation = document.getElementById('sentence-translation');
+        const pronounceBtn = document.getElementById('pronounceBtn');
+        const againBtn = document.getElementById('againBtn');
+        const goodBtn = document.getElementById('goodBtn');
+        const easyBtn = document.getElementById('easyBtn');
+        const progressElement = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        const level = document.getElementById('level');
+        const flashcardBtn = document.getElementById('flashcardBtn');
+        const quizBtn = document.getElementById('quizBtn');
+        const flashcardMode = document.getElementById('flashcardMode');
+        const quizMode = document.getElementById('quizMode');
+
+        // Text-to-speech function
+        function speak(text, lang = 'af-ZA') {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = lang;
+                utterance.rate = 0.8;
+                speechSynthesis.speak(utterance);
+            }
         }
-        backgroundVideo.pause();
-        userVideo.srcObject = null;
-        videoCall.style.display = 'none';
-        callEnded.style.display = 'flex';
-    });
-</script>
+
+        // Spaced repetition algorithm (simplified SM-2)
+        function updateSpacedRepetition(wordId, quality) {
+            const p = progress[wordId];
+            p.total++;
+            
+            if (quality >= 3) {
+                p.correct++;
+                if (p.repetitions === 0) {
+                    p.interval = 1;
+                } else if (p.repetitions === 1) {
+                    p.interval = 6;
+                } else {
+                    p.interval = Math.round(p.interval * p.easeFactor);
+                }
+                p.repetitions++;
+                p.nextReview = Date.now() + (p.interval * 24 * 60 * 60 * 1000);
+            } else {
+                p.repetitions = 0;
+                p.interval = 1;
+                p.nextReview = Date.now();
+            }
+            
+            p.easeFactor = p.easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+            if (p.easeFactor < 1.3) p.easeFactor = 1.3;
+            
+            localStorage.setItem('progress', JSON.stringify(progress));
+            updateProgress();
+        }
+
+        // Get next word for review
+        function getNextWord() {
+            const now = Date.now();
+            const dueWords = vocabulary.filter(word => progress[word.id].nextReview <= now);
+            
+            if (dueWords.length > 0) {
+                return dueWords.sort((a, b) => progress[a.id].nextReview - progress[b.id].nextReview)[0];
+            }
+            
+            return vocabulary[Math.floor(Math.random() * vocabulary.length)];
+        }
+
+        // Display current word
+        function showWord() {
+            const word = getNextWord();
+            currentWordIndex = vocabulary.findIndex(w => w.id === word.id);
+            
+            afrikaansWord.textContent = word.afrikaans;
+            englishWord.textContent = word.english;
+            sentence.textContent = word.sentence;
+            sentenceTranslation.textContent = word.sentenceTranslation;
+            
+            // Reset card to front
+            flashcard.classList.remove('flipped');
+            isFlipped = false;
+        }
+
+        // Update progress display
+        function updateProgress() {
+            const masteredWords = Object.values(progress).filter(p => p.repetitions >= 3).length;
+            const totalWords = vocabulary.length;
+            const percentage = Math.round((masteredWords / totalWords) * 100);
+            
+            progressElement.textContent = `${masteredWords}/${totalWords}`;
+            progressBar.style.width = `${percentage}%`;
+            
+            if (percentage < 30) level.textContent = 'Beginner';
+            else if (percentage < 70) level.textContent = 'Intermediate';
+            else level.textContent = 'Advanced';
+        }
+
+        // Quiz functions
+        function startQuiz() {
+            quizData = vocabulary.slice().sort(() => Math.random() - 0.5).slice(0, 5);
+            currentQuizIndex = 0;
+            quizScore = 0;
+            showQuizQuestion();
+        }
+
+        function showQuizQuestion() {
+            if (currentQuizIndex >= quizData.length) {
+                showQuizResults();
+                return;
+            }
+
+            const word = quizData[currentQuizIndex];
+            const questionNum = document.getElementById('questionNum');
+            const quizQuestion = document.getElementById('quizQuestion');
+            const quizOptions = document.getElementById('quizOptions');
+            const quizFeedback = document.getElementById('quizFeedback');
+            const nextQuizBtn = document.getElementById('nextQuizBtn');
+
+            questionNum.textContent = currentQuizIndex + 1;
+            quizQuestion.textContent = `What does "${word.afrikaans}" mean?`;
+
+            // Generate options
+            const correctAnswer = word.english;
+            const wrongAnswers = vocabulary
+                .filter(w => w.id !== word.id)
+                .map(w => w.english)
+                .slice(0, 3);
+            
+            const options = [correctAnswer, ...wrongAnswers].sort(() => Math.random() - 0.5);
+
+            quizOptions.innerHTML = options.map((option, index) => `
+                <button class="quiz-option w-full p-3 text-left border-2 border-gray-200 rounded-lg hover:border-blue-300 transition-colors" data-answer="${option}">
+                    ${option}
+                </button>
+            `).join('');
+
+            // Add click handlers
+            document.querySelectorAll('.quiz-option').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const selectedAnswer = e.target.dataset.answer;
+                    const isCorrect = selectedAnswer === correctAnswer;
+                    
+                    // Visual feedback
+                    document.querySelectorAll('.quiz-option').forEach(b => {
+                        b.disabled = true;
+                        if (b.dataset.answer === correctAnswer) {
+                            b.classList.add('bg-green-100', 'border-green-500');
+                        } else if (b === e.target && !isCorrect) {
+                            b.classList.add('bg-red-100', 'border-red-500');
+                        }
+                    });
+
+                    if (isCorrect) {
+                        quizScore++;
+                        quizFeedback.className = 'mt-4 p-3 rounded-lg bg-green-100 border border-green-300';
+                        quizFeedback.innerHTML = `
+                            <div class="text-green-800 font-medium">Correct! 🎉</div>
+                            <div class="text-sm text-green-600 mt-1">"${word.sentence}"</div>
+                            <div class="text-sm text-green-600">${word.sentenceTranslation}</div>
+                        `;
+                    } else {
+                        quizFeedback.className = 'mt-4 p-3 rounded-lg bg-red-100 border border-red-300';
+                        quizFeedback.innerHTML = `
+                            <div class="text-red-800 font-medium">Incorrect. The answer is "${correctAnswer}"</div>
+                            <div class="text-sm text-red-600 mt-1">"${word.sentence}"</div>
+                            <div class="text-sm text-red-600">${word.sentenceTranslation}</div>
+                        `;
+                    }
+                    
+                    quizFeedback.classList.remove('hidden');
+                    nextQuizBtn.classList.remove('hidden');
+                });
+            });
+
+            quizFeedback.classList.add('hidden');
+            nextQuizBtn.classList.add('hidden');
+        }
+
+        function showQuizResults() {
+            document.getElementById('quizResults').classList.remove('hidden');
+            document.getElementById('quizScore').textContent = `${quizScore}/5`;
+            
+            // Hide quiz question area
+            document.querySelector('#quizMode > div:first-child').classList.add('hidden');
+            document.getElementById('nextQuizBtn').classList.add('hidden');
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            
+            if (mode === 'flashcard') {
+                flashcardMode.classList.remove('hidden');
+                quizMode.classList.add('hidden');
+                flashcardBtn.classList.add('bg-blue-500', 'text-white');
+                flashcardBtn.classList.remove('text-gray-600');
+                quizBtn.classList.remove('bg-blue-500', 'text-white');
+                quizBtn.classList.add('text-gray-600');
+                showWord();
+            } else {
+                flashcardMode.classList.add('hidden');
+                quizMode.classList.remove('hidden');
+                quizBtn.classList.add('bg-blue-500', 'text-white');
+                quizBtn.classList.remove('text-gray-600');
+                flashcardBtn.classList.remove('bg-blue-500', 'text-white');
+                flashcardBtn.classList.add('text-gray-600');
+                
+                // Reset quiz mode
+                document.getElementById('quizResults').classList.add('hidden');
+                document.querySelector('#quizMode > div:first-child').classList.remove('hidden');
+                startQuiz();
+            }
+        }
+
+        // Event listeners
+        flashcard.addEventListener('click', () => {
+            if (currentMode === 'flashcard') {
+                flashcard.classList.toggle('flipped');
+                isFlipped = !isFlipped;
+            }
+        });
+
+        pronounceBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const word = vocabulary[currentWordIndex];
+            speak(word.afrikaans);
+        });
+
+        againBtn.addEventListener('click', () => {
+            const word = vocabulary[currentWordIndex];
+            updateSpacedRepetition(word.id, 1);
+            showWord();
+        });
+
+        goodBtn.addEventListener('click', () => {
+            const word = vocabulary[currentWordIndex];
+            updateSpacedRepetition(word.id, 3);
+            showWord();
+        });
+
+        easyBtn.addEventListener('click', () => {
+            const word = vocabulary[currentWordIndex];
+            updateSpacedRepetition(word.id, 5);
+            showWord();
+        });
+
+        flashcardBtn.addEventListener('click', () => switchMode('flashcard'));
+        quizBtn.addEventListener('click', () => switchMode('quiz'));
+
+        document.getElementById('nextQuizBtn').addEventListener('click', () => {
+            currentQuizIndex++;
+            showQuizQuestion();
+        });
+
+        document.getElementById('restartQuizBtn').addEventListener('click', () => {
+            switchMode('quiz');
+        });
+
+        // Initialize app
+        updateProgress();
+        showWord();
+
+        // Add swipe gestures for mobile
+        let startX = 0;
+        let startY = 0;
+
+        flashcard.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        });
+
+        flashcard.addEventListener('touchend', (e) => {
+            if (!startX || !startY) return;
+
+            const endX = e.changedTouches[0].clientX;
+            const endY = e.changedTouches[0].clientY;
+            
+            const diffX = startX - endX;
+            const diffY = startY - endY;
+
+            // Swipe right = Easy, Swipe left = Again, Tap = flip
+            if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+                e.preventDefault();
+                const word = vocabulary[currentWordIndex];
+                if (diffX > 0) {
+                    // Swipe left - Again
+                    updateSpacedRepetition(word.id, 1);
+                } else {
+                    // Swipe right - Easy
+                    updateSpacedRepetition(word.id, 5);
+                }
+                showWord();
+            }
+
+            startX = 0;
+            startY = 0;
+        });
+    </script>
 </body>
 </html>
